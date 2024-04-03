@@ -2,9 +2,9 @@
 
 // System pinout (final)
 //               _________
-// BAT_CHARGE > |D0     5v| < USB-C PWR
-// MPU_A_INT  > |D1    GND| < Common Ground
-// MPU_B_INT  > |D2    3v3| < Battery PWR
+// BAT_CHARGE > |D0     5v|
+// MPU_A_INT  > |D1    GND|
+// MPU_B_INT  > |D2    3v3|
 // MPU_C_INT  > |D3    D10| < SPI_MOSI
 // MPU_A_EN   > |D4     D9| < SPI_MISO
 // MPU_B_EN   > |D5     D8| < SPI_CLK
@@ -18,28 +18,32 @@
 #define MPU_A_EN_PIN   D4    // MPU A Enable
 #define MPU_B_EN_PIN   D5    // MPU B Enable
 #define MPU_C_EN_PIN   D6    // MPU C Enable
-#define OLED_SCR_EN    D7    // OLED Screen Enable
+#define OLED_EN_PIN    D7    // OLED Enable
 
 #define MPU_SAMPLE_RATE_HZ 100
 
 typedef struct { float x; float y; float z; } component_t;
-typedef struct {
+struct mpu_capture_t {
+  unsigned long time;
   component_t accel;
   component_t gyro;
   component_t mag;
   float temp;
-} mpu_capture_t;
+} volatile
+*const mpu_a_capture = NULL,
+*const mpu_b_capture = NULL,
+*const mpu_c_capture = NULL;
 
 bfs::Mpu9250 mpu_a(&SPI, MPU_A_EN_PIN);    // MPU A
 bfs::Mpu9250 mpu_b(&SPI, MPU_B_EN_PIN);    // MPU B
 bfs::Mpu9250 mpu_c(&SPI, MPU_C_EN_PIN);    // MPU C
 
-mpu_capture_t* mpu_a_capture = NULL;
-mpu_capture_t* mpu_b_capture = NULL;
-mpu_capture_t* mpu_c_capture = NULL;
+/*
 
-static inline void mpu_read(bfs::Mpu9250 mpu, mpu_capture_t *ret) {
+
+static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t *ret) {
   if (mpu.Read()) {
+    ret->time = micros();
     ret->accel.x = mpu.accel_x_mps2();
     ret->accel.y = mpu.accel_y_mps2();
     ret->accel.z = mpu.accel_z_mps2();
@@ -53,17 +57,24 @@ static inline void mpu_read(bfs::Mpu9250 mpu, mpu_capture_t *ret) {
   }
 }
 
-void MPU_A_ISR() { mpu_read(mpu_a, mpu_a_capture); }
-void MPU_B_ISR() { mpu_read(mpu_b, mpu_b_capture); }
-void MPU_C_ISR() { mpu_read(mpu_c, mpu_c_capture); }
+*/
 
-bool configureMPU(bfs::Mpu9250 mpu, uint8_t pin, void (*isr)()) {
+void MPU_A_ISR() {  }
+void MPU_B_ISR() { }
+void MPU_C_ISR() {  }
+
+bool configureMPU(bfs::Mpu9250 mpu, uint8_t interruptPin, void (*isr)()) {
   static constexpr unsigned int mpu_srd = ((1000 - MPU_SAMPLE_RATE_HZ) / MPU_SAMPLE_RATE_HZ);
   if(mpu.Begin() && mpu.ConfigSrd(mpu_srd) && mpu.EnableDrdyInt()) {
-    attachInterrupt(pin, isr, RISING);
+    pinMode(interruptPin, INPUT);    // Default pinmode
+    attachInterrupt(interruptPin, isr, RISING);
     return true;
   }
   return false;
+}
+
+void error() {
+  while(true){}
 }
 
 void setup() {
@@ -73,11 +84,12 @@ void setup() {
 
   SPI.begin();
 
-  noInterrupts();
+  interrupts();
   if(!configureMPU(mpu_a, MPU_A_INT_PIN, MPU_A_ISR) || !configureMPU(mpu_b, MPU_B_INT_PIN, MPU_B_ISR) || !configureMPU(mpu_c, MPU_C_INT_PIN, MPU_C_ISR)) {
     Serial.println("Unable to configure the MPUs");
+    error();
   }
-  interrupts();
+  noInterrupts();
 }
 
 void loop() {
