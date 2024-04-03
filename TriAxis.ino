@@ -1,4 +1,4 @@
-#include "invensense-imu/src/mpu9250.h"
+#include "libraries/invensense-imu/src/mpu9250.h"
 
 // System pinout (final)
 //               _________
