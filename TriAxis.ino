@@ -1,14 +1,14 @@
-#include "mpu9250.h"
+#include "invensense-imu/src/mpu9250.h"
 
 // System pinout (final)
 //               _________
 // BAT_CHARGE > |D0     5v| < USB-C PWR
 // MPU_A_INT  > |D1    GND| < Common Ground
 // MPU_B_INT  > |D2    3v3| < Battery PWR
-// MPU_C_INT  > |D3    D10| < SPI_MOSI  
-// MPU_A_EN   > |D4     D9| < SPI_MISO  
-// MPU_B_EN   > |D5     D8| < SPI_CLK  
-// MPU_C_EN   > |D6     D7| < STATUS_LED (NPN + PNP transistor)
+// MPU_C_INT  > |D3    D10| < SPI_MOSI
+// MPU_A_EN   > |D4     D9| < SPI_MISO
+// MPU_B_EN   > |D5     D8| < SPI_CLK
+// MPU_C_EN   > |D6     D7| < OLED_SCR_EN
 //               ‾‾‾‾‾‾‾‾‾
 
 #define BAT_CHARGE_PIN D0    // Battery Analog Read
@@ -18,7 +18,7 @@
 #define MPU_A_EN_PIN   D4    // MPU A Enable
 #define MPU_B_EN_PIN   D5    // MPU B Enable
 #define MPU_C_EN_PIN   D6    // MPU C Enable
-#define STATUS_LED_PIN D7    // Status LED
+#define OLED_SCR_EN    D7    // OLED Screen Enable
 
 #define MPU_SAMPLE_RATE_HZ 100
 
@@ -38,7 +38,7 @@ mpu_capture_t* mpu_a_capture = NULL;
 mpu_capture_t* mpu_b_capture = NULL;
 mpu_capture_t* mpu_c_capture = NULL;
 
-void mpu_read(bfs::Mpu9250 mpu, mpu_capture_t* ret) {
+static inline void mpu_read(bfs::Mpu9250 mpu, mpu_capture_t *ret) {
   if (mpu.Read()) {
     ret->accel.x = mpu.accel_x_mps2();
     ret->accel.y = mpu.accel_y_mps2();
