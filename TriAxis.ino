@@ -29,49 +29,42 @@
                              // there would be no harm in running the sensor at 1Mhz, but for
                              // development and debugging purposes I want to keep it at 100hz
 
-typedef struct { float x; float y; float z; } component_t;
+typedef struct { float x; float y; float z; } capture_component_t;
 struct mpu_capture_t {
   unsigned long time;
-  component_t accel;
-  component_t gyro;
-  component_t mag;
+  capture_component_t accel;
+  capture_component_t gyro;
+  capture_component_t mag;
   float temp;
-} volatile
-*const mpu_a_capture = NULL,
-*const mpu_b_capture = NULL,
-*const mpu_c_capture = NULL;
+} static volatile mpu_a_capture, mpu_b_capture, mpu_c_capture;
 
 bfs::Mpu9250 mpu_a(&SPI, MPU_A_EN_PIN);    // MPU A
 bfs::Mpu9250 mpu_b(&SPI, MPU_B_EN_PIN);    // MPU B
 bfs::Mpu9250 mpu_c(&SPI, MPU_C_EN_PIN);    // MPU C
 
-/*
-
-
-static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t *ret) {
+// This should probably be a macro. I need to spend some time considering if it will expand properly in all cases, though...
+static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t volatile *capture) {
   if (mpu.Read()) {
-    ret->time = micros();
-    ret->accel.x = mpu.accel_x_mps2();
-    ret->accel.y = mpu.accel_y_mps2();
-    ret->accel.z = mpu.accel_z_mps2();
-    ret->gyro.x = mpu.gyro_x_radps();
-    ret->gyro.y = mpu.gyro_y_radps();
-    ret->gyro.z = mpu.gyro_z_radps();
-    ret->mag.x = mpu.mag_x_ut();
-    ret->mag.y = mpu.mag_y_ut();
-    ret->mag.z = mpu.mag_z_ut();
-    ret->temp = mpu.die_temp_c();
+    capture->time = micros();
+    capture->accel.x = mpu.accel_x_mps2();
+    capture->accel.y = mpu.accel_y_mps2();
+    capture->accel.z = mpu.accel_z_mps2();
+    capture->gyro.x = mpu.gyro_x_radps();
+    capture->gyro.y = mpu.gyro_y_radps();
+    capture->gyro.z = mpu.gyro_z_radps();
+    capture->mag.x = mpu.mag_x_ut();
+    capture->mag.y = mpu.mag_y_ut();
+    capture->mag.z = mpu.mag_z_ut();
+    capture->temp = mpu.die_temp_c();
   }
 }
 
-*/
-
-void MPU_A_ISR() {  }
-void MPU_B_ISR() { }
-void MPU_C_ISR() {  }
+void MPU_A_ISR() { mpu_capture(mpu_a, &mpu_a_capture); }
+void MPU_B_ISR() { mpu_capture(mpu_b, &mpu_b_capture); }
+void MPU_C_ISR() { mpu_capture(mpu_c, &mpu_c_capture); }
 
 bool configureMPU(bfs::Mpu9250 mpu, uint8_t interruptPin, void (*isr)()) {
-  static constexpr unsigned int mpu_srd = ((1000 - MPU_SAMPLE_RATE_HZ) / MPU_SAMPLE_RATE_HZ);
+  static constexpr unsigned int mpu_srd = ((1000 - MPU_SAMPLE_RATE) / MPU_SAMPLE_RATE);
   if(mpu.Begin() && mpu.ConfigSrd(mpu_srd) && mpu.EnableDrdyInt()) {
     pinMode(interruptPin, INPUT);    // Default pinmode
     attachInterrupt(interruptPin, isr, RISING);
