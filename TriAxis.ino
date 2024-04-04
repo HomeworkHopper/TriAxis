@@ -6,9 +6,9 @@
 // MPU_A_INT  > |D1    GND|
 // MPU_B_INT  > |D2    3v3|
 // MPU_C_INT  > |D3    D10| < SPI_MOSI
-// MPU_A_EN   > |D4     D9| < SPI_MISO
+// MPU_A_EN   > |D4     D9| < SPI_MISO & OLED_DC
 // MPU_B_EN   > |D5     D8| < SPI_CLK
-// MPU_C_EN   > |D6     D7| < OLED_SCR_EN
+// MPU_C_EN   > |D6     D7| < OLED_EN
 //               ‾‾‾‾‾‾‾‾‾
 
 #define BAT_CHARGE_PIN D0    // Battery Analog Read
@@ -19,8 +19,15 @@
 #define MPU_B_EN_PIN   D5    // MPU B Enable
 #define MPU_C_EN_PIN   D6    // MPU C Enable
 #define OLED_EN_PIN    D7    // OLED Enable
+#define OLED_DC_PIN    D9    // OLED DC pin, NOTE: D9 is also the MISO pin, 
+                             // but the OLED display does not use the MISO pin,
+                             // so we're able to use it as the DC pin. The Adafruit
+                             // library had to be slightly modified to support this
 
-#define MPU_SAMPLE_RATE_HZ 100
+#define MPU_SAMPLE_RATE 100  // The accelerometer/gyroscope can sample at up to 1000hz (1Mhz),
+                             // but the magnometer can only run at 100hz, max. In practice,
+                             // there would be no harm in running the sensor at 1Mhz, but for
+                             // development and debugging purposes I want to keep it at 100hz
 
 typedef struct { float x; float y; float z; } component_t;
 struct mpu_capture_t {
