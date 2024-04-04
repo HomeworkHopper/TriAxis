@@ -42,9 +42,9 @@ bfs::Mpu9250 mpu_a(&SPI, MPU_A_EN_PIN);    // MPU A
 bfs::Mpu9250 mpu_b(&SPI, MPU_B_EN_PIN);    // MPU B
 bfs::Mpu9250 mpu_c(&SPI, MPU_C_EN_PIN);    // MPU C
 
-// This should probably be a macro. I need to spend some time considering if it will expand properly in all cases, though...
+// This should probably be a macro. I need to spend some time considering if it will expand properly in all cases, though... (should there really ever be an "if" statement in a macro!?)
 static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t volatile *capture) {
-  if (mpu.Read()) {
+  if (mpu.Read()) { // Should always be true, since this function is invoked in reasponse to a data-ready interrupt
     capture->time = micros();
     capture->accel.x = mpu.accel_x_mps2();
     capture->accel.y = mpu.accel_y_mps2();
@@ -56,6 +56,8 @@ static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t volatile *
     capture->mag.y = mpu.mag_y_ut();
     capture->mag.z = mpu.mag_z_ut();
     capture->temp = mpu.die_temp_c();
+  } else {
+    error("Attempted to capture MPU data when none was present");
   }
 }
 
@@ -73,8 +75,17 @@ bool configureMPU(bfs::Mpu9250 mpu, uint8_t interruptPin, void (*isr)()) {
   return false;
 }
 
-void error() {
-  while(true){}
+// NEVER call this function directly from an IRQ! (oops)
+static volatile 
+static inline void error(char *msg) {
+
+  Serial.print("error(): ");
+  Serial.print(msg);
+  Serial.flush(); // Push out all remaining serial data before the stop interrupts.
+                  // This is important because serial transmissions are interrupt-based
+
+  noInterrupts(); // Ignore all future interrupts
+  while(true){}   // Loop until reset
 }
 
 void setup() {
@@ -86,8 +97,7 @@ void setup() {
 
   interrupts();
   if(!configureMPU(mpu_a, MPU_A_INT_PIN, MPU_A_ISR) || !configureMPU(mpu_b, MPU_B_INT_PIN, MPU_B_ISR) || !configureMPU(mpu_c, MPU_C_INT_PIN, MPU_C_ISR)) {
-    Serial.println("Unable to configure the MPUs");
-    error();
+    error("Unable to configure the MPUs");
   }
   noInterrupts();
 }
