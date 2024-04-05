@@ -112,6 +112,21 @@ void setup() {
   // display.setContrast (0);
   display.begin(0, true);
   display.display();
+
+  delay(2000);
+  
+  display.clearDisplay();
+
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0, 0);
+  display.println("Failure is always an option");
+  display.setTextColor(SH110X_BLACK, SH110X_WHITE); // 'inverted' text
+  display.println(3.141592);
+  display.setTextSize(2);
+  display.setTextColor(SH110X_WHITE);
+  display.print("0x"); display.println(0xDEADBEEF, HEX);
+  display.display();
 }
 
 void loop() {
