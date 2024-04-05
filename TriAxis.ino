@@ -1,3 +1,5 @@
+#include <SPI.h>
+#include <Adafruit_SH110X.h>
 #include "libraries/invensense-imu/src/mpu9250.h"
 
 // System pinout (final)
@@ -10,6 +12,7 @@
 // MPU_B_EN   > |D5     D8| < SPI_CLK
 // MPU_C_EN   > |D6     D7| < OLED_EN
 //               ‾‾‾‾‾‾‾‾‾
+// Note: Attach OLED RST pin to the EN pin of the XIAO
 
 #define BAT_CHARGE_PIN D0    // Battery Analog Read
 #define MPU_A_INT_PIN  D1    // MPU A Interrupt
@@ -29,6 +32,15 @@
                              // there would be no harm in running the sensor at 1Mhz, but for
                              // development and debugging purposes I want to keep it at 100hz
 
+// OLED Display
+static Adafruit_SH1106G display = Adafruit_SH1106G(128, 64, &SPI, OLED_DC_PIN, -1 /*IGNORE RST PIN*/, OLED_EN_PIN);
+
+// MPU A, B, C
+bfs::Mpu9250 mpu_a(&SPI, MPU_A_EN_PIN);
+bfs::Mpu9250 mpu_b(&SPI, MPU_B_EN_PIN);
+bfs::Mpu9250 mpu_c(&SPI, MPU_C_EN_PIN);
+
+// MPU Data Capture Structs
 typedef struct { float x; float y; float z; } capture_component_t;
 struct mpu_capture_t {
   unsigned long time;
@@ -37,10 +49,6 @@ struct mpu_capture_t {
   capture_component_t mag;
   float temp;
 } static volatile mpu_a_capture, mpu_b_capture, mpu_c_capture;
-
-bfs::Mpu9250 mpu_a(&SPI, MPU_A_EN_PIN);    // MPU A
-bfs::Mpu9250 mpu_b(&SPI, MPU_B_EN_PIN);    // MPU B
-bfs::Mpu9250 mpu_c(&SPI, MPU_C_EN_PIN);    // MPU C
 
 // This should probably be a macro. I need to spend some time considering if it will expand properly in all cases, though... (should there really ever be an "if" statement in a macro!?)
 static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t volatile *capture) {
@@ -57,7 +65,7 @@ static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t volatile *
     capture->mag.z = mpu.mag_z_ut();
     capture->temp = mpu.die_temp_c();
   } else {
-    error("Attempted to capture MPU data when none was present");
+
   }
 }
 
@@ -76,14 +84,13 @@ bool configureMPU(bfs::Mpu9250 mpu, uint8_t interruptPin, void (*isr)()) {
 }
 
 // NEVER call this function directly from an IRQ! (oops)
-static volatile 
+static volatile bool global_error = false;
 static inline void error(char *msg) {
 
   Serial.print("error(): ");
   Serial.print(msg);
   Serial.flush(); // Push out all remaining serial data before the stop interrupts.
                   // This is important because serial transmissions are interrupt-based
-
   noInterrupts(); // Ignore all future interrupts
   while(true){}   // Loop until reset
 }
@@ -95,12 +102,21 @@ void setup() {
 
   SPI.begin();
 
-  interrupts();
-  if(!configureMPU(mpu_a, MPU_A_INT_PIN, MPU_A_ISR) || !configureMPU(mpu_b, MPU_B_INT_PIN, MPU_B_ISR) || !configureMPU(mpu_c, MPU_C_INT_PIN, MPU_C_ISR)) {
-    error("Unable to configure the MPUs");
-  }
   noInterrupts();
+  if(!configureMPU(mpu_a, MPU_A_INT_PIN, MPU_A_ISR)) {
+    error("Unable to configure the MPUs");
+    sleep(10000);
+  }
+  interrupts();
+
+  // display.setContrast (0);
+  display.begin(0, true);
+  display.display();
 }
 
 void loop() {
+  // If an error occured (probably in an ISR) then we need to stop
+  if(global_error) {
+    error("a");  // Never returns
+  }
 }
