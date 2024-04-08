@@ -7,7 +7,7 @@
 // BAT_CHARGE > |D0     5v|
 // MPU_A_INT  > |D1    GND|
 // MPU_B_INT  > |D2    3v3|
-//            > |D3    D10| < MOSI (SPI)
+// Pushbutton > |D3    D10| < MOSI (SPI)
 // SDA (I2C)  > |D4     D9| < MISO (SPI, not used by OLED)
 // SCL (I2C)  > |D5     D8| < CLK (SPI)
 // OLED_DC    > |D6     D7| < OLED_EN
@@ -17,8 +17,11 @@
 #define BAT_CHARGE_PIN D0    // Battery Analog Read
 #define MPU_A_INT_PIN  D1    // MPU A Interrupt
 #define MPU_B_INT_PIN  D2    // MPU B Interrupt
-#define OLED_EN_PIN    D7    // OLED EN pin
+#define PUTBUTTON_PIN  D3    // Pushbutton
+
 #define OLED_DC_PIN    D6    // OLED DC pin
+#define OLED_EN_PIN    D7    // OLED EN pin
+
 
 #define MPU_SAMPLE_RATE 1000
 
