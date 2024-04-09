@@ -22,8 +22,8 @@
 #define OLED_DC_PIN    D6    // OLED DC pin
 #define OLED_EN_PIN    D7    // OLED EN pin
 
-#define MPU_A_ADDR MPU6050_I2CADDR_DEFAULT
-#define MPU_B_ADDR MPU6050_I2CADDR_DEFAULT + 1
+#define MPU_A_ADDR MPU6050_I2CADDR_DEFAULT      // AD0 must be pulled low (default)
+#define MPU_B_ADDR MPU6050_I2CADDR_DEFAULT + 1  // AD0 must be pulled high (~3.3v)
 
 #define BAT_READ_SAMPLES 16
 
@@ -55,12 +55,7 @@ struct mpu_capture_t {
   0.0
 };
 
-/*
-void MPU_A_ISR() { mpu_capture(mpu_a, &mpu_a_capture); }
-void MPU_B_ISR() { mpu_capture(mpu_b, &mpu_b_capture); }
-*/
-
-bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
+static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   if (mpu->begin(addr)) {
     mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu->setGyroRange(MPU6050_RANGE_500_DEG);
@@ -70,20 +65,18 @@ bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   return false;
 }
 
-float readBatteryVoltage() {
+static inline void captureMPU(const Adafruit_MPU6050 *mpu, struct mpu_capture_t volatile * const capture) {}
 
-  uint32_t Vtotal = 0;
-  for(int i = 0; i < BAT_READ_SAMPLES; Vtotal += analogReadMilliVolts(A0), i++);
+static void MPU_A_ISR() { captureMPU(&mpu_a, &mpu_a_capture); }
+static void MPU_B_ISR() { captureMPU(&mpu_b, &mpu_b_capture); }
 
-  // Calculate observed voltage (V):
-  //  V = 2 * Vtotal / BAT_READ_SAMPLES / 1000.0
-  //  V = (2 * Vtotal) / (1000 * BAT_READ_SAMPLES)
-  //  V = (Vtotal) / (500 * BAT_READ_SAMPLES)
-  //   let Vdivisor = (500 * BAT_READ_SAMPLES)
-  //  V = Vtotal / Vdivisor
+static inline float readBatteryVoltage() {
   static constexpr uint32_t Vdivisor = 500 * BAT_READ_SAMPLES;
-
-  return Vtotal / Vdivisor;
+  for(uint32_t i = 1, e = BAT_READ_SAMPLES, Vtotal = 0; true; Vtotal += analogReadMilliVolts(BAT_CHARGE_PIN), i++) {
+    if(i > e) {
+      return Vtotal / Vdivisor;
+    }
+  }
 }
 
 void setup() {
