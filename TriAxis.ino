@@ -22,8 +22,10 @@
 #define OLED_DC_PIN    D6    // OLED DC pin
 #define OLED_EN_PIN    D7    // OLED EN pin
 
+#define MPU_A_ADDR MPU6050_I2CADDR_DEFAULT
+#define MPU_B_ADDR MPU6050_I2CADDR_DEFAULT + 1
 
-#define MPU_SAMPLE_RATE 1000
+#define BAT_READ_CYCLES 16
 
 // OLED Display
 static Adafruit_SH1106G display = Adafruit_SH1106G(128, 64, &SPI, OLED_DC_PIN, /*IGNORE RST PIN*/ -1, OLED_EN_PIN);
@@ -65,55 +67,31 @@ void MPU_B_ISR() { mpu_capture(mpu_b, &mpu_b_capture); }
 
 bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   if (!mpu->begin(addr)) {
-    Serial.println("Failed to find MPU6050 chip");
     return false;
   }
-  Serial.println("MPU6050 Found!");
-
   mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
   mpu->setGyroRange(MPU6050_RANGE_500_DEG);
   mpu->setFilterBandwidth(MPU6050_BAND_21_HZ);
-
   return true;
 }
 
-
 float readBatteryVoltage() {
   uint32_t Vbatt = 0;
-  for(int i = 0; i < 16; i++) {
+  for(int i = 0; i < BAT_READ_CYCLES; i++) {
     Vbatt = Vbatt + analogReadMilliVolts(A0);  
   }
-  return 2 * Vbatt / 16 / 1000.0;
-}
-
-// NEVER call this function directly from an IRQ! (oops)
-static volatile bool global_error = false;
-static inline void error(char *msg) {
-
-  Serial.print("error(): ");
-  Serial.print(msg);
-  Serial.flush(); // Push out all remaining serial data before the stop interrupts.
-                  // This is important because serial transmissions are interrupt-based
-  noInterrupts(); // Ignore all future interrupts
-  while(true){}   // Loop until reset
+  return 2 * Vbatt / BAT_READ_CYCLES / 1000.0;
 }
 
 static bool mpu_a_status, mpu_b_status;
 
 void setup() {
-  
-  Serial.begin(115200);
-  while(!Serial) { delay(10); }
 
   pinMode(A0, INPUT);
 
-  mpu_a_status = configureMPU(&mpu_a, MPU6050_I2CADDR_DEFAULT);
-  mpu_b_status = configureMPU(&mpu_b, MPU6050_I2CADDR_DEFAULT + 1);
+  mpu_a_status = configureMPU(&mpu_a, MPU_A_ADDR);
+  mpu_b_status = configureMPU(&mpu_b, MPU_B_ADDR);
 
-  Serial.println(mpu_a_status);
-  Serial.println(mpu_b_status);
-
-  // display.setContrast (0);
   display.begin();
   display.display();
   delay(2000);
@@ -122,10 +100,6 @@ void setup() {
 static sensors_event_t a, g, temp;
 
 void loop() {
-  // If an error occured (probably in an ISR) then we need to stop
-  if(global_error) {
-    error("Error");  // Never returns
-  }
 
   display.clearDisplay();
   display.setTextSize(1);
@@ -151,11 +125,11 @@ void loop() {
     display.print(g.gyro.y);
     display.print(", ");
     display.println(g.gyro.z);
-
-    display.println("");
   } else {
     display.println("ERROR");
   }
+
+  display.println();
 
   if(mpu_b_status) {
     mpu_b.getEvent(&a, &g, &temp);
