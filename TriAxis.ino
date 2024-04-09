@@ -25,13 +25,16 @@
 #define MPU_A_ADDR MPU6050_I2CADDR_DEFAULT
 #define MPU_B_ADDR MPU6050_I2CADDR_DEFAULT + 1
 
-#define BAT_READ_CYCLES 16
+#define BAT_READ_SAMPLES 16
 
 // OLED Display
 static Adafruit_SH1106G display = Adafruit_SH1106G(128, 64, &SPI, OLED_DC_PIN, /*IGNORE RST PIN*/ -1, OLED_EN_PIN);
 
 // MPU A, B
 static Adafruit_MPU6050 mpu_a, mpu_b;
+
+// MPU status
+static bool mpu_a_status, mpu_b_status;
 
 // MPU Data Capture Structs
 typedef struct { float x; float y; float z; } capture_component_t;
@@ -53,47 +56,35 @@ struct mpu_capture_t {
 };
 
 /*
-// This should probably be a macro. I need to spend some time considering if it will expand properly in all cases, though... (should there really ever be an "if" statement in a macro!?)
-static inline void mpu_capture(bfs::Mpu9250 mpu, struct mpu_capture_t volatile *capture) {
-  if (mpu.Read()) { // Should always be true, since this function is invoked in reasponse to a data-ready interrupt
-    capture->time = micros();
-    capture->accel.x = mpu.accel_x_mps2();
-    capture->accel.y = mpu.accel_y_mps2();
-    capture->accel.z = mpu.accel_z_mps2();
-    capture->gyro.x = mpu.gyro_x_radps();
-    capture->gyro.y = mpu.gyro_y_radps();
-    capture->gyro.z = mpu.gyro_z_radps();
-    capture->temp = mpu.die_temp_c();
-  } else {
-
-  }
-}
-*/
-
-/*
 void MPU_A_ISR() { mpu_capture(mpu_a, &mpu_a_capture); }
 void MPU_B_ISR() { mpu_capture(mpu_b, &mpu_b_capture); }
 */
 
 bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
-  if (!mpu->begin(addr)) {
-    return false;
+  if (mpu->begin(addr)) {
+    mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu->setGyroRange(MPU6050_RANGE_500_DEG);
+    mpu->setFilterBandwidth(MPU6050_BAND_21_HZ);
+    return true;
   }
-  mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
-  mpu->setGyroRange(MPU6050_RANGE_500_DEG);
-  mpu->setFilterBandwidth(MPU6050_BAND_21_HZ);
-  return true;
+  return false;
 }
 
 float readBatteryVoltage() {
-  uint32_t Vbatt = 0;
-  for(int i = 0; i < BAT_READ_CYCLES; i++) {
-    Vbatt = Vbatt + analogReadMilliVolts(A0);  
-  }
-  return 2 * Vbatt / BAT_READ_CYCLES / 1000.0;
-}
 
-static bool mpu_a_status, mpu_b_status;
+  uint32_t Vtotal = 0;
+  for(int i = 0; i < BAT_READ_SAMPLES; Vtotal += analogReadMilliVolts(A0), i++);
+
+  // Calculate observed voltage (V):
+  //  V = 2 * Vtotal / BAT_READ_SAMPLES / 1000.0
+  //  V = (2 * Vtotal) / (1000 * BAT_READ_SAMPLES)
+  //  V = (Vtotal) / (500 * BAT_READ_SAMPLES)
+  //   let Vdivisor = (500 * BAT_READ_SAMPLES)
+  //  V = Vtotal / Vdivisor
+  static constexpr uint32_t Vdivisor = 500 * BAT_READ_SAMPLES;
+
+  return Vtotal / Vdivisor;
+}
 
 void setup() {
 
