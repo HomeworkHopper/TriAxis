@@ -40,7 +40,17 @@ struct mpu_capture_t {
   capture_component_t accel;
   capture_component_t gyro;
   float temp;
-} static volatile mpu_a_capture, mpu_b_capture;
+} static volatile mpu_a_capture = {
+  0,
+  {0.0, 0.0, 0.0},
+  {0.0, 0.0, 0.0},
+  0.0
+}, mpu_b_capture = {
+  0,
+  {0.0, 0.0, 0.0},
+  {0.0, 0.0, 0.0},
+  0.0
+};
 
 /*
 // This should probably be a macro. I need to spend some time considering if it will expand properly in all cases, though... (should there really ever be an "if" statement in a macro!?)
