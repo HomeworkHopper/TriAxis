@@ -1,3 +1,0 @@
-[submodule "libraries/invensense-imu"]
-	path = libraries/invensense-imu
-	url = https://github.com/bolderflight/invensense-imu.git
