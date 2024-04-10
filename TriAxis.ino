@@ -4,31 +4,40 @@
 
 // System pinout (final)
 //               _________
-// BAT_CHARGE > |D0     5v|
+// BAT_CHARGE > |D0/A0  5v|
 // MPU_A_INT  > |D1    GND|
 // MPU_B_INT  > |D2    3v3|
 // Pushbutton > |D3    D10| < MOSI (SPI)
-// SDA (I2C)  > |D4     D9| < MISO (SPI, not used by OLED)
+// SDA (I2C)  > |D4     D9| < MISO (SPI) [unused]
 // SCL (I2C)  > |D5     D8| < CLK (SPI)
 // OLED_DC    > |D6     D7| < OLED_EN
 //               ‾‾‾‾‾‾‾‾‾
 // Note: Attach OLED RST pin to the EN pin of the XIAO
 
-#define BAT_CHARGE_PIN D0    // Battery Analog Read
-#define MPU_A_INT_PIN  D1    // MPU A Interrupt
-#define MPU_B_INT_PIN  D2    // MPU B Interrupt
-#define PUTBUTTON_PIN  D3    // Pushbutton
+#define BAT_CHARGE_PIN A0    // Battery Analog Read (see BAT_READ_SAMPLES)
+#define MPU_A_INT_PIN  D1    // MPU A Interrupt (Data Ready + GPIO Wakeup)
+#define MPU_B_INT_PIN  D2    // MPU B Interrupt (Data Ready + GPIO Wakeup)
+#define PUTBUTTON_PIN  D3    // Pushbutton (Menu Navigation + GPIO Wakeup)
+#define OLED_DC_PIN    D6    // OLED DC pin (crutial for proper operation)
+#define OLED_EN_PIN    D7    // OLED EN pin (TODO: Could we hold this low)
 
-#define OLED_DC_PIN    D6    // OLED DC pin
-#define OLED_EN_PIN    D7    // OLED EN pin
+#define BAT_READ_SAMPLES 16  // Samples to take when reading battery voltage
+
+#define OLED_WIDTH  128      // Width of the OLED screen, in pixels
+#define OLED_HEIGHT 64       // Height of the OLED screen, in pixels
 
 #define MPU_A_ADDR MPU6050_I2CADDR_DEFAULT      // AD0 must be pulled low (default)
 #define MPU_B_ADDR MPU6050_I2CADDR_DEFAULT + 1  // AD0 must be pulled high (~3.3v)
 
-#define BAT_READ_SAMPLES 16
+#define OLED_CLEAR(oled) do {                         \
+                     oled.clearDisplay();             \
+                     oled.setTextSize(1);             \
+                     oled.setTextColor(SH110X_WHITE); \
+                     oled.setCursor(0, 0);            \
+                   } while(0);
 
 // OLED Display
-static Adafruit_SH1106G display = Adafruit_SH1106G(128, 64, &SPI, OLED_DC_PIN, /*IGNORE RST PIN*/ -1, OLED_EN_PIN);
+static Adafruit_SH1106G oled_display = Adafruit_SH1106G(OLED_WIDTH, OLED_HEIGHT, &SPI, OLED_DC_PIN, /*IGNORE RST PIN*/ -1, OLED_EN_PIN);
 
 // MPU A, B
 static Adafruit_MPU6050 mpu_a, mpu_b;
@@ -72,75 +81,54 @@ static void MPU_B_ISR() { captureMPU(&mpu_b, &mpu_b_capture); }
 
 static inline float readBatteryVoltage() {
   static constexpr uint32_t Vdivisor = 500 * BAT_READ_SAMPLES;
-  for(uint32_t i = 1, e = BAT_READ_SAMPLES, Vtotal = 0; true; Vtotal += analogReadMilliVolts(BAT_CHARGE_PIN), i++) {
-    if(i > e) {
-      return Vtotal / Vdivisor;
-    }
+
+  uint32_t Vtotal = 0;
+  for(int i = 0; i < BAT_READ_SAMPLES; Vtotal += analogReadMilliVolts(BAT_CHARGE_PIN), i++) {}
+  return Vtotal / Vdivisor;
+}
+
+static inline void error(Adafruit_SH1106G *oled = nullptr, const char *msg = "General Error") {
+  if(oled) {
+    Adafruit_SH1106G _oled = *oled;
+    OLED_CLEAR(_oled);
+    _oled.println("Error:");
+    _oled.print(msg);
   }
+
+  while(true) { delay(10); }
 }
 
 void setup() {
 
-  pinMode(A0, INPUT);
+  // Configure OLED Display
+  if(!oled_display.begin()) {
+    error();
+  }
 
-  mpu_a_status = configureMPU(&mpu_a, MPU_A_ADDR);
-  mpu_b_status = configureMPU(&mpu_b, MPU_B_ADDR);
+  // Configure MPU A
+  if(!configureMPU(&mpu_a, MPU_A_ADDR)) {
+    error(&oled_display, "Failed to configure MPU A");
+  }
 
-  display.begin();
-  display.display();
-  delay(2000);
+  // Configure MPU B
+  if(!configureMPU(&mpu_b, MPU_B_ADDR)) {
+    error(&oled_display, "Failed to configure MPU B");
+  }
+
+  // Show splash image
+  oled_display.display();
+
+  // WAIT FOR PUSH BUTTON HERE
 }
-
-static sensors_event_t a, g, temp;
 
 void loop() {
 
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(0, 0);
+  OLED_CLEAR(oled_display);
 
-  display.print("Battery: ");
-  display.print(readBatteryVoltage());
-  display.println("V");
-  display.println("");
+  oled_display.print("Battery: ");
+  oled_display.print(readBatteryVoltage());
+  oled_display.println("V");
 
-  if(mpu_a_status) {
-    mpu_a.getEvent(&a, &g, &temp);
-
-    /* Print out the values */
-    display.print(a.acceleration.x);
-    display.print(", ");
-    display.print(a.acceleration.y);
-    display.print(", ");
-    display.println(a.acceleration.z);
-    display.print(g.gyro.x);
-    display.print(", ");
-    display.print(g.gyro.y);
-    display.print(", ");
-    display.println(g.gyro.z);
-  } else {
-    display.println("ERROR");
-  }
-
-  display.println();
-
-  if(mpu_b_status) {
-    mpu_b.getEvent(&a, &g, &temp);
-    display.print(a.acceleration.x);
-    display.print(", ");
-    display.print(a.acceleration.y);
-    display.print(", ");
-    display.println(a.acceleration.z);
-    display.print(g.gyro.x);
-    display.print(", ");
-    display.print(g.gyro.y);
-    display.print(", ");
-    display.println(g.gyro.z);
-  } else {
-    display.println("ERROR");
-  }
-
-  display.display();
+  oled_display.display();
   delay(500);
 }
