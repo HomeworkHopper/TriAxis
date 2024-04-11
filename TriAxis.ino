@@ -48,21 +48,11 @@ static bool mpu_a_status, mpu_b_status;
 // MPU Data Capture Structs
 typedef struct { float x; float y; float z; } capture_component_t;
 struct mpu_capture_t {
-  unsigned long time;
-  capture_component_t accel;
-  capture_component_t gyro;
-  float temp;
-} static volatile mpu_a_capture = {
-  0,
-  {0.0, 0.0, 0.0},
-  {0.0, 0.0, 0.0},
-  0.0
-}, mpu_b_capture = {
-  0,
-  {0.0, 0.0, 0.0},
-  {0.0, 0.0, 0.0},
-  0.0
-};
+  uint32_t timestamp;
+  sensors_event_t accel;
+  sensors_event_t gyro;
+  sensors_event_t temp;
+} static mpu_a_capture = { 0 }, mpu_b_capture = { 0 };
 
 static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   if (mpu->begin(addr)) {
@@ -74,7 +64,10 @@ static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   return false;
 }
 
-static inline void captureMPU(const Adafruit_MPU6050 *mpu, struct mpu_capture_t volatile * const capture) {}
+static inline void captureMPU(Adafruit_MPU6050 *mpu, struct mpu_capture_t * const capture) {
+  const uint32_t timestamp = micros();
+  mpu->getEvent(&capture->accel, &capture->gyro, &capture->temp);
+}
 
 static void MPU_A_ISR() { captureMPU(&mpu_a, &mpu_a_capture); }
 static void MPU_B_ISR() { captureMPU(&mpu_b, &mpu_b_capture); }
@@ -128,6 +121,11 @@ void loop() {
   oled_display.print("Battery: ");
   oled_display.print(readBatteryVoltage());
   oled_display.println("V");
+
+  noInterrupts();
+  struct mpu_capture_t captureACopy = mpu_a_capture;
+  struct mpu_capture_t captureBCopy = mpu_b_capture;
+  interrupts();
 
   oled_display.display();
   delay(500);
