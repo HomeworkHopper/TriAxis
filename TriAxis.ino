@@ -14,6 +14,19 @@
 //               ‾‾‾‾‾‾‾‾‾
 // Note: Attach OLED RST pin to the EN pin of the XIAO
 
+
+static inline uint8_t __ENTER(void) {
+  taskENTER_CRITICAL(nullptr);
+  return 1;
+}
+
+static inline void __EXIT(const uint8_t *dummy) {
+  taskEXIT_CRITICAL(nullptr)
+  __asm__ volatile ("" ::: "memory");
+}
+
+#define ATOMIC_BLOCK for (uint8_t dummy __attribute__((__cleanup__(__EXIT))) = 0, __ToDo = __ENTER(); __ToDo ; __ToDo = 0 )
+
 #define BAT_CHARGE_PIN A0    // Battery Analog Read (see BAT_READ_SAMPLES)
 #define MPU_A_INT_PIN  D1    // MPU A Interrupt (Data Ready + GPIO Wakeup)
 #define MPU_B_INT_PIN  D2    // MPU B Interrupt (Data Ready + GPIO Wakeup)
@@ -42,17 +55,19 @@ static Adafruit_SH1106G oled_display = Adafruit_SH1106G(OLED_WIDTH, OLED_HEIGHT,
 // MPU A, B
 static Adafruit_MPU6050 mpu_a, mpu_b;
 
-// MPU status
-static bool mpu_a_status, mpu_b_status;
-
 // MPU Data Capture Structs
-typedef struct { float x; float y; float z; } capture_component_t;
+typedef struct {
+  float x;                     //  4 bytes
+  float y;                     //  4 bytes
+  float z;                     //  4 bytes
+} capture_component_t;
+
 struct mpu_capture_t {
-  uint32_t timestamp;
-  sensors_event_t accel;
-  sensors_event_t gyro;
-  sensors_event_t temp;
-} static mpu_a_capture = { 0 }, mpu_b_capture = { 0 };
+  capture_component_t accel;   //  12 bytes
+  capture_component_t gyro;    //  12 bytes
+  uint32_t temp;               //  4 bytes
+  volatile int64_t timestamp;  //  4 bytes
+} static mpu_a_capture, mpu_b_capture;
 
 static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   if (mpu->begin(addr)) {
@@ -64,19 +79,21 @@ static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   return false;
 }
 
-static inline void captureMPU(Adafruit_MPU6050 *mpu, struct mpu_capture_t * const capture) {
-  const uint32_t timestamp = micros();
-  mpu->getEvent(&capture->accel, &capture->gyro, &capture->temp);
-}
+#define NEW_CAPTURE(capture) capture.timestamp >= 0
+#define VALIDATE_CAPTURE(capture) capture.timestamp = esp_timer_get_time()
+#define INVALIDATE_CAPTURE (capture) capture.timestamp = -1
 
-static void MPU_A_ISR() { captureMPU(&mpu_a, &mpu_a_capture); }
-static void MPU_B_ISR() { captureMPU(&mpu_b, &mpu_b_capture); }
+void MPU_A_ISR() { VALIDATE_CAPTURE(mpu_a_capture); }
+void MPU_B_ISR() { VALIDATE_CAPTURE(mpu_b_capture); }
 
+  //mpu->getEvent(&capture->accel, &capture->gyro, &capture->temp);
 static inline float readBatteryVoltage() {
   static constexpr uint32_t Vdivisor = 500 * BAT_READ_SAMPLES;
 
   uint32_t Vtotal = 0;
-  for(int i = 0; i < BAT_READ_SAMPLES; Vtotal += analogReadMilliVolts(BAT_CHARGE_PIN), i++) {}
+  for(int i = 0; i < BAT_READ_SAMPLES; i++) {
+    Vtotal += analogReadMilliVolts(BAT_CHARGE_PIN);
+  }
   return Vtotal / Vdivisor;
 }
 
@@ -122,10 +139,10 @@ void loop() {
   oled_display.print(readBatteryVoltage());
   oled_display.println("V");
 
-  noInterrupts();
-  struct mpu_capture_t captureACopy = mpu_a_capture;
-  struct mpu_capture_t captureBCopy = mpu_b_capture;
-  interrupts();
+  if(NEW_CAPTURE(mpu_a_capture) || NEW_CAPTURE(mpu_b_capture)) {
+    ATOMIC_BLOCK {
+    }
+  }
 
   oled_display.display();
   delay(500);
