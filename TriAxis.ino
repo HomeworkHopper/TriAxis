@@ -16,13 +16,10 @@
 //               ‾‾‾‾‾‾‾‾‾
 // Note: Attach OLED RST pin to the EN pin of the XIAO
 
-
-
-
 #define BAT_CHARGE_PIN A0    // Battery Analog Read (see BAT_READ_SAMPLES)
 #define MPU_A_INT_PIN  D1    // MPU A Interrupt (Data Ready + GPIO Wakeup)
 #define MPU_B_INT_PIN  D2    // MPU B Interrupt (Data Ready + GPIO Wakeup)
-#define PUTBUTTON_PIN  D3    // Pushbutton (Menu Navigation + GPIO Wakeup)
+#define PUSHBUTTON_PIN  D3   // Pushbutton (Menu Navigation + GPIO Wakeup)
 #define OLED_DC_PIN    D6    // OLED DC pin (crutial for proper operation)
 #define OLED_EN_PIN    D7    // OLED EN pin (TODO: Could we hold this low)
 
@@ -44,35 +41,41 @@
 // OLED Display
 static Adafruit_SH1106G oled_display = Adafruit_SH1106G(OLED_WIDTH, OLED_HEIGHT, &SPI, OLED_DC_PIN, /*IGNORE RST PIN*/ -1, OLED_EN_PIN);
 
+static Adafruit_MPU6050 mpu_a, mpu_b;
 struct triaxis_sensor_t {
-  Adafruit_MPU6050 mpuSensor;
+  Adafruit_MPU6050 *mpuSensor;
   volatile int64_t dataTimestamp;
+  uint8_t i2cAddr;
   volatile bool dataReady;
 } static triaxis_a, triaxis_b;
 
 #define TRI_DATA_RDY(triaxis_sensor) triaxis_sensor.dataReady
-#define SET_TRI_DATA_RDY(triaxis_sensor) ATOMIC_BLOCK { triaxis_sensor.dataTimestamp = esp_timer_get_time(); triaxis_sensor.dataReady = true; }
+#define SET_TRI_DATA_RDY(triaxis_sensor) triaxis_sensor.dataTimestamp = esp_timer_get_time(); triaxis_sensor.dataReady = true;
 #define CLR_TRI_DATA_RDY(triaxis_sensor) triaxis_sensor.dataReady = false
 
 // Interrupt Service Routines (DATA READY)
-void MPU_A_ISR() { 
-  if(!TRI_DATA_RDY(triaxis_a)) {
-    SET_TRI_DATA_RDY(triaxis_a);
-  }
-}
-void MPU_B_ISR() {
-  if(!TRI_DATA_RDY(triaxis_b)) {
-    SET_TRI_DATA_RDY(triaxis_b);
-  }
+void MPU_A_ISR() { SET_TRI_DATA_RDY(triaxis_a); }
+void MPU_B_ISR() { SET_TRI_DATA_RDY(triaxis_b); }
+
+static volatile bool pushbutton_interrupt;
+void PUSHBUTTON_ISR() {
+  pushbutton_interrupt = true;
 }
 
-static inline bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
-  if (mpu->begin(addr)) {
+static inline bool configureTRI(struct triaxis_sensor_t *tri) {
+
+  tri->dataTimestamp = 0;
+  tri->i2cAddr = i2cAddr;
+  tri->dataReady = false;
+  tri->mpuSensor = mpu;
+
+  if (mpu->begin(i2cAddr, &Wire)) {
     mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu->setGyroRange(MPU6050_RANGE_500_DEG);
     mpu->setFilterBandwidth(MPU6050_BAND_21_HZ);
     return true;
   }
+
   return false;
 }
 
@@ -117,19 +120,25 @@ void setup() {
   }
 
   // Configure MPU A
-  if(!configureMPU(&triaxis_a.mpuSensor, MPU_A_ADDR)) {
-    error(&oled_display, "Failed to configure MPU A");
+  if(!configureTRI(&triaxis_a, &mpu_a, MPU_A_ADDR)) {
+    error(&oled_display, "Failed to configure TRI A");
   }
 
   // Configure MPU B
-  if(!configureMPU(&triaxis_b.mpuSensor, MPU_B_ADDR)) {
-    error(&oled_display, "Failed to configure MPU B");
+  if(!configureTRI(&triaxis_b, &mpu_b, MPU_B_ADDR)) {
+    error(&oled_display, "Failed to configure TRI B");
   }
 
   // Show splash image
   oled_display.display();
 
-  // WAIT FOR PUSH BUTTON HERE
+  attachInterrupt(PUSHBUTTON_PIN, PUSHBUTTON_ISR, FALLING);
+  for(pushbutton_interrupt = false; !pushbutton_interrupt;) {
+    delay(100); // Average human button press time
+  }
+
+  attachInterrupt(MPU_A_INT_PIN, MPU_A_ISR, RISING);
+  attachInterrupt(MPU_B_INT_PIN, MPU_B_ISR, RISING);
 }
 
 void loop() {
