@@ -2,6 +2,8 @@
 #include <Adafruit_SH110X.h>
 #include <Adafruit_MPU6050.h>
 
+#include "AtomicBlock.h"
+
 // System pinout (final)
 //               _________
 // BAT_CHARGE > |D0/A0  5v|
@@ -15,17 +17,7 @@
 // Note: Attach OLED RST pin to the EN pin of the XIAO
 
 
-static inline uint8_t __ENTER(void) {
-  taskENTER_CRITICAL(nullptr);
-  return 1;
-}
 
-static inline void __EXIT(const uint8_t *dummy) {
-  taskEXIT_CRITICAL(nullptr)
-  __asm__ volatile ("" ::: "memory");
-}
-
-#define ATOMIC_BLOCK for (uint8_t dummy __attribute__((__cleanup__(__EXIT))) = 0, __ToDo = __ENTER(); __ToDo ; __ToDo = 0 )
 
 #define BAT_CHARGE_PIN A0    // Battery Analog Read (see BAT_READ_SAMPLES)
 #define MPU_A_INT_PIN  D1    // MPU A Interrupt (Data Ready + GPIO Wakeup)
@@ -52,24 +44,29 @@ static inline void __EXIT(const uint8_t *dummy) {
 // OLED Display
 static Adafruit_SH1106G oled_display = Adafruit_SH1106G(OLED_WIDTH, OLED_HEIGHT, &SPI, OLED_DC_PIN, /*IGNORE RST PIN*/ -1, OLED_EN_PIN);
 
-// MPU A, B
-static Adafruit_MPU6050 mpu_a, mpu_b;
+struct triaxis_sensor_t {
+  Adafruit_MPU6050 mpuSensor;
+  volatile int64_t dataTimestamp;
+  volatile bool dataReady;
+} static triaxis_a, triaxis_b;
 
-// MPU Data Capture Structs
-typedef struct {
-  float x;                     //  4 bytes
-  float y;                     //  4 bytes
-  float z;                     //  4 bytes
-} capture_component_t;
+#define TRI_DATA_RDY(triaxis_sensor) triaxis_sensor.dataReady
+#define SET_TRI_DATA_RDY(triaxis_sensor) ATOMIC_BLOCK { triaxis_sensor.dataTimestamp = esp_timer_get_time(); triaxis_sensor.dataReady = true; }
+#define CLR_TRI_DATA_RDY(triaxis_sensor) triaxis_sensor.dataReady = false
 
-struct mpu_capture_t {
-  capture_component_t accel;   //  12 bytes
-  capture_component_t gyro;    //  12 bytes
-  uint32_t temp;               //  4 bytes
-  volatile int64_t timestamp;  //  4 bytes
-} static mpu_a_capture, mpu_b_capture;
+// Interrupt Service Routines (DATA READY)
+void MPU_A_ISR() { 
+  if(!TRI_DATA_RDY(triaxis_a)) {
+    SET_TRI_DATA_RDY(triaxis_a);
+  }
+}
+void MPU_B_ISR() {
+  if(!TRI_DATA_RDY(triaxis_b)) {
+    SET_TRI_DATA_RDY(triaxis_b);
+  }
+}
 
-static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
+static inline bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   if (mpu->begin(addr)) {
     mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu->setGyroRange(MPU6050_RANGE_500_DEG);
@@ -79,14 +76,18 @@ static bool configureMPU(Adafruit_MPU6050 *mpu, uint8_t addr) {
   return false;
 }
 
-#define NEW_CAPTURE(capture) capture.timestamp >= 0
-#define VALIDATE_CAPTURE(capture) capture.timestamp = esp_timer_get_time()
-#define INVALIDATE_CAPTURE (capture) capture.timestamp = -1
+/*
+static inline bool readNewMPUData() {
+  if(MPU_DATA_RDY(mpu_a_status)) {
+    CLR_MPU_DATA_RDY(mpu_a_status);
+    
+    // Read the new data
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+  }
+}
+*/
 
-void MPU_A_ISR() { VALIDATE_CAPTURE(mpu_a_capture); }
-void MPU_B_ISR() { VALIDATE_CAPTURE(mpu_b_capture); }
-
-  //mpu->getEvent(&capture->accel, &capture->gyro, &capture->temp);
 static inline float readBatteryVoltage() {
   static constexpr uint32_t Vdivisor = 500 * BAT_READ_SAMPLES;
 
@@ -116,12 +117,12 @@ void setup() {
   }
 
   // Configure MPU A
-  if(!configureMPU(&mpu_a, MPU_A_ADDR)) {
+  if(!configureMPU(&triaxis_a.mpuSensor, MPU_A_ADDR)) {
     error(&oled_display, "Failed to configure MPU A");
   }
 
   // Configure MPU B
-  if(!configureMPU(&mpu_b, MPU_B_ADDR)) {
+  if(!configureMPU(&triaxis_b.mpuSensor, MPU_B_ADDR)) {
     error(&oled_display, "Failed to configure MPU B");
   }
 
@@ -139,9 +140,9 @@ void loop() {
   oled_display.print(readBatteryVoltage());
   oled_display.println("V");
 
-  if(NEW_CAPTURE(mpu_a_capture) || NEW_CAPTURE(mpu_b_capture)) {
-    ATOMIC_BLOCK {
-    }
+  if(TRI_DATA_RDY(triaxis_a)) {
+    
+    CLR_TRI_DATA_RDY(triaxis_a);
   }
 
   oled_display.display();
