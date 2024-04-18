@@ -14,12 +14,12 @@
 // SCL (I2C)  > |D5     D8| < CLK (SPI)
 // OLED_DC    > |D6     D7| < OLED_EN
 //               ‾‾‾‾‾‾‾‾‾
-// Note: Attach OLED RST pin to the EN pin of the XIAO
+// Note: OLED RST pin attached to the EN pin of the XIAO
 
 #define BAT_CHARGE_PIN A0    // Battery Analog Read (see BAT_READ_SAMPLES)
 #define MPU_A_INT_PIN  D1    // MPU A Interrupt (Data Ready + GPIO Wakeup)
 #define MPU_B_INT_PIN  D2    // MPU B Interrupt (Data Ready + GPIO Wakeup)
-#define PUSHBUTTON_PIN  D3   // Pushbutton (Menu Navigation + GPIO Wakeup)
+#define PUSHBUTTON_PIN D3    // Pushbutton (Menu Navigation + GPIO Wakeup)
 #define OLED_DC_PIN    D6    // OLED DC pin (crutial for proper operation)
 #define OLED_EN_PIN    D7    // OLED EN pin (TODO: Could we hold this low)
 
@@ -107,6 +107,7 @@ static inline void error(Adafruit_SH1106G *oled = nullptr, const char *msg = "Ge
     OLED_CLEAR(_oled);
     _oled.println("Error:");
     _oled.print(msg);
+    _oled.display();
   }
 
   while(true) { delay(10); }
