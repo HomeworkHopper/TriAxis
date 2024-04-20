@@ -1,11 +1,11 @@
 static inline bool __BLOCK_ENTER(void) {
   __asm__ volatile ("" ::: "memory");
-  taskENTER_CRITICAL(nullptr);
+  noInterrupts();
   return true;
 }
 
 static inline void __BLOCK_EXIT(bool*) {
-  taskEXIT_CRITICAL(nullptr)
+  interrupts();
   __asm__ volatile ("" ::: "memory");
 }
 
