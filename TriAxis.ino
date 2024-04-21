@@ -74,6 +74,7 @@ void PUSHBUTTON_ISR() {
   pushbutton_interrupt = true;
 }
 
+// Configure MPU sensor
 static inline bool configureMPU(Adafruit_MPU6050 *mpu, const uint8_t i2cAddr) {
   if (mpu && mpu->begin(i2cAddr, &Wire)) {
     mpu->setAccelerometerRange(MPU6050_RANGE_8_G);
@@ -85,6 +86,7 @@ static inline bool configureMPU(Adafruit_MPU6050 *mpu, const uint8_t i2cAddr) {
   }
 }
 
+// Configure TRI structure
 static inline bool configureTRI(struct triaxis_sensor_t *tri, Adafruit_MPU6050 *mpu) {
   if(mpu) {
     tri->dataTimestamp = -1;
@@ -96,6 +98,7 @@ static inline bool configureTRI(struct triaxis_sensor_t *tri, Adafruit_MPU6050 *
   }
 }
 
+// Data processing function which displays readings on the OLED screen
 static inline void processData(const struct triaxis_sensor_t  *tri,
     void (*processingFunction)(const struct triaxis_capture_t *capture)) {
   
@@ -108,7 +111,7 @@ static inline void processData(const struct triaxis_sensor_t  *tri,
 
   // Copy timestamp (atomically)
   ATOMIC_BLOCK {
-    // It's true that this timestamp could have changed 
+    // This timestamp could have just changed but this is the best we can do
     captureData.dataTimestamp = tri->dataTimestamp;
   }
 
@@ -130,7 +133,7 @@ static inline void processData(const struct triaxis_sensor_t  *tri,
 }
 
 static inline void displayCaptureDataOLED(const struct triaxis_capture_t *capture) {
-  /* Print out the sensor values */
+  // Print out the sensor values
   oled_display.print("Timestamp: ");
   oled_display.println(capture->dataTimestamp);
   oled_display.print(capture->accel.x);
