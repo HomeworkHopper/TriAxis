@@ -6,7 +6,7 @@
 
 // System pinout
 //               _________
-// BAT_CHARGE > |D0/A0  5v|
+// BAT_CHARGE > |A0     5v|
 // MPU_A_INT  > |D1    GND|
 // MPU_B_INT  > |D2    3v3|
 // Pushbutton > |D3    D10| < MOSI (SPI)
