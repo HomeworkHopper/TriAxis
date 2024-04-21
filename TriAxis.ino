@@ -96,18 +96,19 @@ static inline bool configureTRI(struct triaxis_sensor_t *tri, Adafruit_MPU6050 *
   }
 }
 
-static inline bool processData(const struct triaxis_sensor_t  *tri,
+static inline void processData(const struct triaxis_sensor_t  *tri,
     void (*processingFunction)(const struct triaxis_capture_t *capture)) {
   
-  // Read sensor data
+  // Data storage
   static sensors_event_t a, g, t;
-  tri->mpuSensor->getEvent(&a, &g, &t);
-
-  // Triaxis data
   static triaxis_capture_t captureData;
+
+  // Read sensor data
+  tri->mpuSensor->getEvent(&a, &g, &t);
 
   // Copy timestamp (atomically)
   ATOMIC_BLOCK {
+    // It's true that this timestamp could have changed 
     captureData.dataTimestamp = tri->dataTimestamp;
   }
 
@@ -129,7 +130,19 @@ static inline bool processData(const struct triaxis_sensor_t  *tri,
 }
 
 static inline void displayCaptureDataOLED(const struct triaxis_capture_t *capture) {
-
+  /* Print out the sensor values */
+  oled_display.print("Timestamp: ");
+  oled_display.println(capture->dataTimestamp);
+  oled_display.print(capture->accel.x);
+  oled_display.print(", ");
+  oled_display.print(capture->accel.y);
+  oled_display.print(", ");
+  oled_display.println(capture->accel.z);
+  oled_display.print(capture->gyro.x);
+  oled_display.print(", ");
+  oled_display.print(capture->gyro.y);
+  oled_display.print(", ");
+  oled_display.println(capture->gyro.z);
 }
 
 static inline float readBatteryVoltage() {
