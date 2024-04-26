@@ -111,7 +111,8 @@ static inline void processData(const struct triaxis_sensor_t  *tri,
 
   // Copy timestamp (atomically)
   ATOMIC_BLOCK {
-    // This timestamp could have just changed but this is the best we can do
+    // This timestamp could have ^just^ changed, but we can't do much about that
+    // Something we CAN do, though, is copy it atomically so we don't merge two timestamps into one!
     captureData.dataTimestamp = tri->dataTimestamp;
   }
 
