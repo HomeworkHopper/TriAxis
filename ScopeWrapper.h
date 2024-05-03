@@ -7,7 +7,7 @@ public:
     ScopeWrapper(void (*enter_func)(), void (*exit_func)()) {
         _exit_func = exit_func;
         enter_func();
-        validate();
+        _is_valid = true;
     }
 
     ~ScopeWrapper() { _exit_func(); }
@@ -17,13 +17,9 @@ public:
         return _is_valid;
     }
 
-    void validate() {
-        _is_valid = true;
-    }
-
     void invalidate() {
         _is_valid = false;
     }
 };
 
-#define WRAP_SCOPE(entr, exit) for(ScopeWrapper _sw(&entr, &exit); _sw.is_valid(); _sw.invalidate())
+#define WRAP_SCOPE(entr, exit) for(ScopeWrapper _sw(entr, exit); _sw.is_valid(); _sw.invalidate())

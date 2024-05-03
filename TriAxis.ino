@@ -4,7 +4,7 @@
 
 #include "ScopeWrapper.h"
 
-#define ATOMIC_BLOCK  WRAP_SCOPE(vPortEnterCritical, vPortExitCritical)
+#define ATOMIC_BLOCK  WRAP_SCOPE(&vPortEnterCritical, &vPortExitCritical)
 
 // System pinout
 //               _________
