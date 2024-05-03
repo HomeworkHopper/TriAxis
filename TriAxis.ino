@@ -2,7 +2,9 @@
 #include <Adafruit_SH110X.h>
 #include <Adafruit_MPU6050.h>
 
-#include "AtomicBlock.h"
+#include "ScopeWrapper.h"
+
+#define ATOMIC_BLOCK  WRAP_SCOPE(vPortEnterCritical, vPortExitCritical)
 
 // System pinout
 //               _________
