@@ -10,7 +10,7 @@ public:
         _is_valid = true;
     }
 
-    ~ScopeWrapper() { _exit_func(); }
+    ~ScopeWrapper() { _exit_func(); asm volatile("FENCE"); }
 
     [[nodiscard]]
     bool is_valid() const {
