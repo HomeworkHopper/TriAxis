@@ -1,20 +1,25 @@
-
+template <typename Type>
 class ScopeWrapper {
-    void (*_exit_func)();
+    void (*_exit_func)(Type);
     bool _is_valid;
+    Type _state;
 
 public:
-    ScopeWrapper(void (*enter_func)(), void (*exit_func)()) {
+    ScopeWrapper(Type (*enter_func)(), void (*exit_func)(Type)) {
         _exit_func = exit_func;
-        enter_func();
-        _is_valid = true;
+        _state = enter_func();
+        validate();
     }
 
-    ~ScopeWrapper() { _exit_func(); asm volatile("FENCE"); }
+    ~ScopeWrapper() { _exit_func(_state); }
 
     [[nodiscard]]
     bool is_valid() const {
         return _is_valid;
+    }
+
+    void validate() {
+        _is_valid = true;
     }
 
     void invalidate() {
@@ -22,4 +27,4 @@ public:
     }
 };
 
-#define WRAP_SCOPE(entr, exit) for(ScopeWrapper _sw(entr, exit); _sw.is_valid(); _sw.invalidate())
+#define WRAP_SCOPE(type, entr, exit) for(ScopeWrapper<type> _sw(entr, exit); _sw.is_valid(); _sw.invalidate())

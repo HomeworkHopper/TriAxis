@@ -4,7 +4,17 @@
 
 #include "ScopeWrapper.h"
 
-#define ATOMIC_BLOCK  WRAP_SCOPE(&vPortEnterCritical, &vPortExitCritical)
+#define ATOMIC_BLOCK  WRAP_SCOPE(uint8_t, &criticalSectionEnter, &criticalSectionExit)
+
+static uint8_t criticalSectionEnter() {
+  vPortEnterCritical();
+  return 10;
+}
+
+static void criticalSectionExit(uint8_t state) {
+  vPortExitCritical();
+  asm volatile("FENCE");
+}
 
 // System pinout
 //               _________
